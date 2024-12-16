@@ -12,14 +12,14 @@ dataset:
 
   # For transforms, assume we'll define them as strings and construct them in code
   # or we can skip this and define them directly in code for now.
-  query_transforms:
+  ground_transforms:
     - type: "RandomHorizontalFlip"
     - type: "Resize"
       height: 256
       width: 256
     - type: "ToTensorV2"
 
-  reference_transforms:
+  satellite_transforms:
     - type: "Resize"
       height: 256
       width: 256
@@ -28,8 +28,7 @@ dataset:
 
 model:
   name: "openai/clip-vit-base-patch16"
-  pretrained: False
-  num_classes: 10  # For CIFAR10
+  pretrained: True
 
 training:
   seed: 42

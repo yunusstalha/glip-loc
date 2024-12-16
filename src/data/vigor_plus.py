@@ -19,24 +19,24 @@ class VigorDataset(Dataset):
                  data_folder: str,
                  split: str = 'train',
                  same_area: bool = True,
-                 transforms_query=None,
-                 transforms_reference=None,
+                 ground_transforms=None,
+                 satellite_transforms=None,
                  use_captions: bool = True):
         """
         Args:
             data_folder (str): Path to the VIGOR dataset directory.
             split (str): One of ['train', 'val']. Determines which split to load.
             same_area (bool): Whether to use the same_area splits for training/validation.
-            transforms_query: Torchvision transforms for query (ground) images.
-            transforms_reference: Torchvision transforms for reference (satellite) images.
+            ground_transforms: Torchvision transforms for ground images.
+            satellite_transforms: Torchvision transforms for satellite images.
             use_captions (bool): If True, load captions for ground and sat images.
         """
         super().__init__()
         self.data_folder = data_folder
         self.split = split
         self.same_area = same_area
-        self.transforms_query = transforms_query
-        self.transforms_reference = transforms_reference
+        self.ground_transforms = ground_transforms
+        self.satellite_transforms = satellite_transforms
         self.use_captions = use_captions
 
         # Define cities based on same_area and split
@@ -139,14 +139,14 @@ class VigorDataset(Dataset):
         idx_ground, idx_sat = self.samples[index]
 
         # Load images
-        query_img = self._load_image(self.idx2ground_path[idx_ground])
-        reference_img = self._load_image(self.idx2sat_path[idx_sat])
+        ground_img = self._load_image(self.idx2ground_path[idx_ground])
+        satellite_img = self._load_image(self.idx2sat_path[idx_sat])
 
         # Apply transforms
-        if self.transforms_query:
-            query_img = self.transforms_query(query_img)
-        if self.transforms_reference:
-            reference_img = self.transforms_reference(reference_img)
+        if self.ground_transforms:
+            ground_img = self.ground_transforms(ground_img)
+        if self.satellite_transforms:
+            satellite_img = self.satellite_transforms(satellite_img)
 
         # Get captions
         ground_filename = self.idx2ground[idx_ground]
@@ -157,7 +157,7 @@ class VigorDataset(Dataset):
         # Label is the sat_idx for retrieval tasks
         label = torch.tensor(idx_sat, dtype=torch.long)
 
-        return query_img, reference_img, label, ground_caption, sat_caption
+        return ground_img, satellite_img, label, ground_caption, sat_caption
 
 
     def _load_image(self, path):
