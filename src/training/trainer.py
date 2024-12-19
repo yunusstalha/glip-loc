@@ -13,7 +13,7 @@ from .schedulers import create_scheduler
 from .utils import clip_gradients
 
 class Trainer:
-    def __init__(self, cfg: Any, model: torch.nn.Module, train_loader: DataLoader, val_loader: DataLoader, logger=None, sim_dict=None):
+    def __init__(self, cfg: Any, model: torch.nn.Module, train_loader: DataLoader, val_loader: DataLoader, logger=None, sim_dict=None, accelerator=None):
         """
         Args:
             cfg: Configuration object.
@@ -22,6 +22,8 @@ class Trainer:
             val_loader (DataLoader): Validation dataloader for frequent metric checks.
             logger: A logger object (e.g. WandbLogger). If None and cfg.wandb.enabled, wandb is initialized here.
             sim_dict: A dictionary containing similarity scores for data mining.
+            accelerator: The Accelerator instance for distributed/mixed-precision training.
+
         """
         self.cfg = cfg
         self.model = model
@@ -29,13 +31,13 @@ class Trainer:
         self.val_loader = val_loader
         self.logger = logger
         self.sim_dict = sim_dict
+        self.accelerator = accelerator
+
+
         # Create optimizer & scheduler
         self.optimizer = create_optimizer(cfg, model)
         self.scheduler = create_scheduler(cfg, self.optimizer)
 
-        # Initialize Accelerator
-        precision = "fp16" if (cfg.accelerate.enabled and cfg.accelerate.fp16) else "no"
-        self.accelerator = Accelerator(mixed_precision=precision)
 
         # Prepare with accelerator
         self.model, self.optimizer, self.train_loader, self.val_loader = self.accelerator.prepare(

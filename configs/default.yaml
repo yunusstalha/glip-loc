@@ -1,7 +1,7 @@
 training:
   seed: 42
   num_epochs: 40
-  batch_size: 128
+  batch_size: 16
   optimizer:
     type: "adamw"
     lr: 0.001
@@ -16,13 +16,13 @@ training:
   log_every: 50
   save_every: 5
   eval_recall_every: 10
-  checkpoint_dir: "./checkpoints"
+  checkpoint_dir: "/home/erzurumlu.1/yunus/research_drive/checkpoints"
 
 dataset:
   name: "VIGOR"
-  data_folder: "./data/VIGOR"
+  data_folder: "/home/erzurumlu.1/yunus/research_drive/data/VIGOR"
   same_area: true
-  batch_size: 128
+  batch_size: 16
   num_workers: 4
   ground_transforms:
     - type: "Resize"

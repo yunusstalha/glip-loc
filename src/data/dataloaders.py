@@ -14,15 +14,15 @@ def build_transforms(transform_cfg):
     # This is a simple example. You might need to adjust according to your config structure.
     t_list = []
     for t in transform_cfg:
-        t_type = t["type"]
+        t_type = t.type
         if t_type == "RandomHorizontalFlip":
             t_list.append(transforms.RandomHorizontalFlip(p=0.5))
         elif t_type == "RandomCrop":
-            t_list.append(transforms.RandomCrop((t["height"], t["width"])))
+            t_list.append(transforms.RandomCrop((t.height, t.width)))
         elif t_type == "Resize":
-            t_list.append(transforms.Resize((t["height"], t["width"])))
+            t_list.append(transforms.Resize((t.height, t.width)))
         elif t_type == "Normalize":
-            t_list.append(transforms.Normalize(mean=t["mean"], std=t["std"]))
+            t_list.append(transforms.Normalize(mean=t.mean, std=t.std))
         elif t_type == "ToTensor":
             t_list.append(transforms.ToTensor())
 

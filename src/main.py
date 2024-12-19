@@ -10,7 +10,10 @@ from data.dataloaders import build_dataloaders
 from models.glip_loc import GLIPLocModel
 from training.trainer import Trainer
 
+from accelerate import Accelerator
+
 import pickle
+
 
 def set_random_seed(seed: int):
     random.seed(seed)
@@ -29,15 +32,15 @@ def main():
     
     # Set random seed
     set_random_seed(cfg.training.seed)
-
+    accelerator = Accelerator(mixed_precision="fp16" if cfg.accelerate.fp16 else "no")
     # Initialize W&B if enabled
     logger = None
-    if cfg.wandb.enabled:
+    if cfg.wandb.enabled and accelerator.is_main_process:
         logger = WandbLogger(cfg)
 
     # Build Dataloaders (train and val)
     train_loader, val_loader = build_dataloaders(cfg)
-    with open("./data/VIGOR/gps_dict_cross.pkl", "rb") as f:
+    with open("/home/erzurumlu.1/yunus/research_drive/data/VIGOR/gps_dict_cross.pkl", "rb") as f:
         sim_dict = pickle.load(f)
 
 
@@ -50,7 +53,7 @@ def main():
 
     # Initialize Trainer
     # Trainer will handle accelerate setup, optimizers, and schedulers internally.
-    trainer = Trainer(cfg, model, train_loader, val_loader, logger=logger, sim_dict=sim_dict)
+    trainer = Trainer(cfg, model, train_loader, val_loader, logger=logger, sim_dict=sim_dict, accelerator=accelerator)
 
     # Run Training
     trainer.run()

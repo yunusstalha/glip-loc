@@ -6,6 +6,8 @@ import pandas as pd
 from torch.utils.data import Dataset
 from PIL import Image
 
+import copy
+
 class VigorDataset(Dataset):
     """
     A simplified version of VIGOR dataset class for training and validation.
@@ -63,8 +65,8 @@ class VigorDataset(Dataset):
         self.idx2ground = dict(zip(self.df_ground.index, self.df_ground.ground))
         self.idx2ground_path = dict(zip(self.df_ground.index, self.df_ground.path_ground))
 
-        # Prepare samples: (ground_idx, sat_idx)
-        self.samples = list(zip(self.df_ground.index, self.df_ground.sat))
+        # Prepare pairs: (ground_idx, sat_idx)
+        self.pairs = list(zip(self.df_ground.index, self.df_ground.sat))
         self._build_idx2pairs()
         self.shuffle_batch_size = 64 # [TODO] Set this to a batch size from config
 
@@ -75,7 +77,7 @@ class VigorDataset(Dataset):
         else:
             self.ground_captions = {}
             self.sat_captions = {}
-
+        self.samples = copy.deepcopy(self.pairs)
     def _load_satellite_list(self):
         sat_list = []
         for city in self.cities:
@@ -190,7 +192,6 @@ class VigorDataset(Dataset):
         '''
         custom shuffle function for unique class_id sampling in batch
         '''
-        import copy
         import time
         import random
         from tqdm import tqdm
@@ -302,7 +303,6 @@ class VigorDataset(Dataset):
         time.sleep(0.3)
         
         self.samples = batches
-        self.pairs = batches  # Update pairs as well if needed
         print("pair_pool:", len(pair_pool))
         print("Original Length: {} - Length after Shuffle: {}".format(len(self.pairs), len(self.samples))) 
         print("Break Counter:", break_counter)
