@@ -1,64 +1,50 @@
-# configs/default.yaml
+training:
+  seed: 42
+  num_epochs: 40
+  batch_size: 128
+  optimizer:
+    type: "adamw"
+    lr: 0.001
+    weight_decay: 0.01
+  scheduler:
+    type: "cosine_annealing"
+    T_max: 40
+  grad_clip:
+    enabled: True
+    max_norm: 1.0
+  label_smoothing: 0.1
+  log_every: 50
+  save_every: 5
+  eval_recall_every: 10
+  checkpoint_dir: "./checkpoints"
 
 dataset:
   name: "VIGOR"
   data_folder: "./data/VIGOR"
   same_area: true
-  split: "train"
-  img_type: "query"
-  use_cubemaps: false
-  batch_size: 64
+  batch_size: 128
   num_workers: 4
-
-  # For transforms, assume we'll define them as strings and construct them in code
-  # or we can skip this and define them directly in code for now.
   ground_transforms:
-    - type: "RandomHorizontalFlip"
     - type: "Resize"
-      height: 256
-      width: 256
-    - type: "ToTensorV2"
-
+      height: 384
+      width: 768
+    - type: "ToTensor"
   satellite_transforms:
     - type: "Resize"
-      height: 256
-      width: 256
-    - type: "ToTensorV2"
+      height: 384
+      width: 384
+    - type: "ToTensor"
 
-
-model:
-  name: "openai/clip-vit-base-patch16"
-  pretrained: True
-
-training:
-  seed: 42
-  num_epochs: 100
-  optimizer:
-    type: "adam"
-    lr: 0.001
-    weight_decay: 1e-4
-  scheduler:
-    type: "step_lr"
-    step_size: 30
-    gamma: 0.1
-  grad_clip:
-    enabled: True
-    max_norm: 1.0
-  mixed_precision: "fp16"
-  
 wandb:
-  enabled: True
-  project: "GLIP-LOC"
-  entity: "your-wandb-username"
-  tags: ["baseline", "resnet", "cifar10"]
-  notes: "Baseline experiment"
+  enabled: true
+  project: "glip-loc"
+  entity: "erzurumlu-1-the-ohio-state-university"
 
 accelerate:
-  enabled: True
-  fp16: True
+  enabled: true
+  fp16: true
 
-evaluation:
-  metrics:
-    - "accuracy"
-  checkpoint_path: "./checkpoints"
-  eval_interval: 5
+model:
+  name: "convnext_base"
+  pretrained: true
+  use_text: false

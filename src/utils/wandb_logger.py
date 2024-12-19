@@ -11,8 +11,6 @@ class WandbLogger:
             wandb.init(
                 project=cfg.wandb.project,
                 entity=cfg.wandb.entity,
-                tags=cfg.wandb.tags,
-                notes=cfg.wandb.notes,
                 name=run_name,
                 config=cfg.__dict__
             )

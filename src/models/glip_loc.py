@@ -1,5 +1,4 @@
-# src/models/model_builder.py
-
+# src/models/glip_loc.py
 import torch
 import torch.nn as nn
 import numpy as np
@@ -69,7 +68,8 @@ class GLIPLocModel(nn.Module):
                 # Since no alignment is necessary, we won't project.
                 self.vision_projection = None
         # Optional logit scale for contrastive training or similar tasks
-        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        self.temperature = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        self.temperature.requires_grad = True
 
     def forward(self, ground_image=None, 
                 satellite_image=None, 

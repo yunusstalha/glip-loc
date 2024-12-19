@@ -2,7 +2,7 @@
 import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from .datasets import VigorDataset
+from .vigor_plus import VigorDataset
 
 def build_transforms(transform_cfg):
     """Build torchvision transforms from config."""

@@ -5,11 +5,12 @@ import random
 import numpy as np
 from utils.config_parser import load_config
 from utils.wandb_logger import WandbLogger
-from accelerate import Accelerator
 
 from data.dataloaders import build_dataloaders
-# from models.model_builder import build_model
-# from training.trainer import Trainer
+from models.glip_loc import GLIPLocModel
+from training.trainer import Trainer
+
+import pickle
 
 def set_random_seed(seed: int):
     random.seed(seed)
@@ -30,29 +31,29 @@ def main():
     set_random_seed(cfg.training.seed)
 
     # Initialize W&B if enabled
-    logger = WandbLogger(cfg)
+    logger = None
+    if cfg.wandb.enabled:
+        logger = WandbLogger(cfg)
 
-    # Initialize accelerator if enabled
-    accelerator = None
-    if cfg.accelerate.enabled:
-        precision = 'fp16' if cfg.accelerate.fp16 else 'no'
-        accelerator = Accelerator(mixed_precision=precision)
-
-    # Build Dataloaders
+    # Build Dataloaders (train and val)
     train_loader, val_loader = build_dataloaders(cfg)
+    with open("./data/VIGOR/gps_dict_cross.pkl", "rb") as f:
+        sim_dict = pickle.load(f)
 
-    # Build Model (placeholder)
-    # model = build_model(cfg.model)
 
-    # Prepare with accelerator if using multi-GPU / mixed precision
-    # if accelerator is not None:
-    #     model, train_loader, val_loader = accelerator.prepare(model, train_loader, val_loader)
+    # Build Model
+    model = GLIPLocModel(
+    model_name=cfg.model.name, 
+    pretrained=cfg.model.pretrained, 
+    use_text=cfg.model.use_text
+)
 
-    # Trainer (placeholder)
-    # trainer = Trainer(cfg, model, train_loader, val_loader, logger, accelerator)
-    # trainer.run()
+    # Initialize Trainer
+    # Trainer will handle accelerate setup, optimizers, and schedulers internally.
+    trainer = Trainer(cfg, model, train_loader, val_loader, logger=logger, sim_dict=sim_dict)
 
-    print("Dataloaders and dataset integrated successfully.")
+    # Run Training
+    trainer.run()
 
 if __name__ == '__main__':
     main()

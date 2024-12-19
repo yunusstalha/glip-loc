@@ -65,6 +65,8 @@ class VigorDataset(Dataset):
 
         # Prepare samples: (ground_idx, sat_idx)
         self.samples = list(zip(self.df_ground.index, self.df_ground.sat))
+        self._build_idx2pairs()
+        self.shuffle_batch_size = 64 # [TODO] Set this to a batch size from config
 
         # Load captions if needed
         if self.use_captions:
@@ -134,6 +136,14 @@ class VigorDataset(Dataset):
                 cap_dict = dict(zip(df['filename'], df['caption']))
                 captions.update(cap_dict)
         return captions
+    
+    def _build_idx2pairs(self):
+        from collections import defaultdict
+        self.idx2pairs = defaultdict(list)
+        # self.pairs is a list of (ground_idx, sat_idx)
+        for pair in self.pairs:
+            _, sat_idx = pair
+            self.idx2pairs[sat_idx].append(pair)
 
     def __getitem__(self, index):
         idx_ground, idx_sat = self.samples[index]
@@ -175,3 +185,126 @@ class VigorDataset(Dataset):
 
     def __len__(self):
         return len(self.samples)
+
+    def shuffle(self, sim_dict=None, neighbour_select=8, neighbour_range=16):
+        '''
+        custom shuffle function for unique class_id sampling in batch
+        '''
+        import copy
+        import time
+        import random
+        from tqdm import tqdm
+
+        print("\nShuffle Dataset:")
+        
+        pair_pool = copy.deepcopy(self.pairs)
+        idx2pair_pool = copy.deepcopy(self.idx2pairs)
+        
+        neighbour_split = neighbour_select // 2
+                            
+        if sim_dict is not None:
+            similarity_pool = copy.deepcopy(sim_dict)                
+        
+        # Shuffle pairs order
+        random.shuffle(pair_pool)
+    
+        # Lookup if already used in epoch
+        pairs_epoch = set()   
+        idx_batch = set()
+
+        # buckets
+        batches = []
+        current_batch = []
+
+        # counter
+        break_counter = 0
+
+        # progressbar
+        pbar = tqdm()
+
+        while True:
+            
+            pbar.update()
+            
+            if len(pair_pool) > 0:
+                pair = pair_pool.pop(0)
+                
+                _, idx = pair
+                
+                if idx not in idx_batch and pair not in pairs_epoch and len(current_batch) < self.shuffle_batch_size:
+                    
+                    idx_batch.add(idx)
+                    current_batch.append(pair)
+                    pairs_epoch.add(pair)
+                    
+                    # remove from pool used for sim-sampling
+                    idx2pair_pool[idx].remove(pair)
+
+                    if sim_dict is not None and len(current_batch) < self.shuffle_batch_size:
+                        
+                        near_similarity = copy.deepcopy(similarity_pool[idx][:neighbour_range])
+                        near_always = copy.deepcopy(near_similarity[:neighbour_split]) 
+                        near_random = copy.deepcopy(near_similarity[neighbour_split:])
+                        random.shuffle(near_random)
+                        near_random = near_random[:neighbour_split]
+                        near_similarity_select = near_always + near_random
+
+                        for idx_near in near_similarity_select:
+                        
+                            # check for space in batch
+                            if len(current_batch) >= self.shuffle_batch_size:
+                                break
+                        
+                            if idx_near not in idx_batch:
+                        
+                                near_pairs = copy.deepcopy(idx2pair_pool[idx_near])
+                                
+                                # up to 2 for one sat view 
+                                random.shuffle(near_pairs)
+                            
+                                for near_pair in near_pairs:
+                                                                                        
+                                    idx_batch.add(idx_near)
+                                    current_batch.append(near_pair)
+                                    pairs_epoch.add(near_pair)
+                                    
+                                    idx2pair_pool[idx_near].remove(near_pair)
+                                    similarity_pool[idx].remove(idx_near)
+                                    
+                                    # only select one view
+                                    break
+                    
+                    break_counter = 0
+                    
+                else:
+                    # if pair fits not in batch and is not already used in epoch -> back to pool
+                    if pair not in pairs_epoch:
+                        pair_pool.append(pair)
+                        
+                    break_counter += 1
+                    
+                if break_counter >= 1024:
+                    break
+                
+            else:
+                break
+
+            if len(current_batch) >= self.shuffle_batch_size:
+            
+                # empty current_batch bucket to batches
+                batches.extend(current_batch)
+                idx_batch = set()
+                current_batch = []
+
+        pbar.close()
+        
+        # wait before closing progress bar
+        time.sleep(0.3)
+        
+        self.samples = batches
+        self.pairs = batches  # Update pairs as well if needed
+        print("pair_pool:", len(pair_pool))
+        print("Original Length: {} - Length after Shuffle: {}".format(len(self.pairs), len(self.samples))) 
+        print("Break Counter:", break_counter)
+        print("Pairs left out of last batch to avoid creating noise:", len(self.pairs) - len(self.samples))
+        print("First Element ID: {} - Last Element ID: {}".format(self.samples[0][1], self.samples[-1][1]))
