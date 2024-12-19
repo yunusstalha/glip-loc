@@ -91,7 +91,7 @@ class GLIPLocModel(nn.Module):
         satellite_embedding = None
         ground_text_embedding = None
         satellite_text_embedding = None
-
+        temperature = self.logit_scale.exp()
         if ground_image is not None:
             ground_embedding = self._forward_image(ground_image)
         
@@ -105,9 +105,9 @@ class GLIPLocModel(nn.Module):
             satellite_text_embedding = self._forward_text(satellite_captions)
 
         if ground_image is not None and satellite_image is not None and self.use_text:
-            return ground_embedding, satellite_embedding, ground_text_embedding, satellite_text_embedding, self.logit_scale
+            return ground_embedding, satellite_embedding, ground_text_embedding, satellite_text_embedding, temperature
         elif ground_image is not None and satellite_image is not None:
-            return ground_embedding, satellite_embedding, self.logit_scale
+            return ground_embedding, satellite_embedding, temperature
         elif ground_image is not None:
             return ground_embedding
         elif satellite_image is not None:

@@ -18,6 +18,10 @@ training:
   eval_recall_every: 10
   checkpoint_dir: "/home/erzurumlu.1/yunus/research_drive/checkpoints"
 
+accelerate:
+  fp16: true
+  logging_dir: "logs"  # Directory for Accelerate to store logs
+  
 dataset:
   name: "VIGOR"
   data_folder: "/home/erzurumlu.1/yunus/research_drive/data/VIGOR"

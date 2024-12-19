@@ -2,25 +2,21 @@
 import os
 import time
 import torch
-import wandb
-import numpy as np
-from accelerate import Accelerator
 from torch.utils.data import DataLoader
-from typing import Optional, Any
+from typing import Any
 
 from .optimizers import create_optimizer
 from .schedulers import create_scheduler
 from .utils import clip_gradients
 
 class Trainer:
-    def __init__(self, cfg: Any, model: torch.nn.Module, train_loader: DataLoader, val_loader: DataLoader, logger=None, sim_dict=None, accelerator=None):
+    def __init__(self, cfg: Any, model: torch.nn.Module, train_loader: DataLoader, val_loader: DataLoader, sim_dict=None, accelerator=None):
         """
         Args:
             cfg: Configuration object.
             model (nn.Module): The model to train.
             train_loader (DataLoader): Training dataloader.
             val_loader (DataLoader): Validation dataloader for frequent metric checks.
-            logger: A logger object (e.g. WandbLogger). If None and cfg.wandb.enabled, wandb is initialized here.
             sim_dict: A dictionary containing similarity scores for data mining.
             accelerator: The Accelerator instance for distributed/mixed-precision training.
 
@@ -29,7 +25,6 @@ class Trainer:
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
-        self.logger = logger
         self.sim_dict = sim_dict
         self.accelerator = accelerator
 
@@ -48,14 +43,6 @@ class Trainer:
         self.global_step = 0
         self.best_val_loss = float('inf')
 
-        # Initialize W&B if needed
-        if cfg.wandb.enabled and self.logger is None:
-            wandb.init(
-                project=cfg.wandb.project,
-                entity=cfg.wandb.entity,
-                config=cfg.__dict__
-            )
-            self.logger = wandb
 
         # Checkpoint directory
         os.makedirs(cfg.training.checkpoint_dir, exist_ok=True)
@@ -73,19 +60,23 @@ class Trainer:
                 self.scheduler.step()
 
             # Logging
-            if self.logger is not None:
-                self.logger.log({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss}, step=self.global_step)
+            # Logging via Accelerator
+            self.accelerator.log({
+                "epoch": epoch,
+                "train_loss": train_loss,
+                "val_loss": val_loss
+            }, step=self.global_step)
 
             # Checkpoint on improvement
             if val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
                 self.save_checkpoint("best_model.pt")
 
-            # Occasionally run full retrieval evaluation
-            if (epoch + 1) % self.cfg.training.eval_recall_every == 0:
-                recall = self.evaluate_recall()
-                if self.logger is not None:
-                    self.logger.log({"recall": recall}, step=self.global_step)
+            # # Occasionally run full retrieval evaluation
+            # if (epoch + 1) % self.cfg.training.eval_recall_every == 0:
+            #     recall = self.evaluate_recall()
+            #     if self.logger is not None:
+            #         self.logger.log_metrics({"recall": recall}, step=self.global_step)
 
             # Save periodic checkpoint
             if (epoch + 1) % self.cfg.training.save_every == 0:
@@ -135,8 +126,8 @@ class Trainer:
             self.global_step += 1
 
             # Intermediate logging
-            if self.logger is not None and self.global_step % self.cfg.training.log_every == 0:
-                self.logger.log({"train_loss": loss.item(), "step": self.global_step})
+            if self.global_step % self.cfg.training.log_every == 0:
+                self.accelerator.log({"train_loss": loss.item()}, step=self.global_step)
 
             # Warm-up logic if needed (depends on scheduler or separate step)
             # For example, if you have a warmup scheduler step per iteration:
@@ -201,8 +192,6 @@ class Trainer:
         # g_emb_all: [B_total, D], s_emb_all: [B_total, D]
         logits = g_emb_all @ s_emb_all.T  # [B_total, B_total]
 
-        # Temperature
-        temp = temp.exp()
         # Targets
         batch_size = g_emb_all.size(0)
         targets = torch.arange(batch_size, device=g_emb_all.device)
