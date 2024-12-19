@@ -10,7 +10,7 @@ from data.dataloaders import build_dataloaders
 from models.glip_loc import GLIPLocModel
 from training.trainer import Trainer
 
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedDataParallelKwargs
 
 import pickle
 
@@ -32,7 +32,8 @@ def main():
     
     # Set random seed
     set_random_seed(cfg.training.seed)
-    accelerator = Accelerator(mixed_precision="fp16" if cfg.accelerate.fp16 else "no")
+    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    accelerator = Accelerator(mixed_precision="fp16" if cfg.accelerate.fp16 else "no", kwargs_handlers=[ddp_kwargs])
     # Initialize W&B if enabled
     logger = None
     if cfg.wandb.enabled and accelerator.is_main_process:

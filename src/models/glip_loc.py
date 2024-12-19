@@ -68,8 +68,8 @@ class GLIPLocModel(nn.Module):
                 # Since no alignment is necessary, we won't project.
                 self.vision_projection = None
         # Optional logit scale for contrastive training or similar tasks
-        self.temperature = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
-        self.temperature.requires_grad = True
+        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        # self.temperature.requires_grad = True
 
     def forward(self, ground_image=None, 
                 satellite_image=None, 
@@ -105,9 +105,9 @@ class GLIPLocModel(nn.Module):
             satellite_text_embedding = self._forward_text(satellite_captions)
 
         if ground_image is not None and satellite_image is not None and self.use_text:
-            return ground_embedding, satellite_embedding, ground_text_embedding, satellite_text_embedding
+            return ground_embedding, satellite_embedding, ground_text_embedding, satellite_text_embedding, self.logit_scale
         elif ground_image is not None and satellite_image is not None:
-            return ground_embedding, satellite_embedding
+            return ground_embedding, satellite_embedding, self.logit_scale
         elif ground_image is not None:
             return ground_embedding
         elif satellite_image is not None:

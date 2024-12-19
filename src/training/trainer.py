@@ -108,21 +108,19 @@ class Trainer:
 
             # Forward pass with or without captions based on `use_text`
             if self.cfg.model.use_text:
-                g_emb, s_emb, g_txt_emb, s_txt_emb = self.model(
+                g_emb, s_emb, g_txt_emb, s_txt_emb, temp = self.model(
                     ground_image=ground_img,
                     satellite_image=sat_img,
                     ground_captions=ground_txt,
                     satellite_captions=sat_txt
                 )
+                loss = self.compute_loss(g_emb, s_emb, g_txt_emb, s_txt_emb, label, temp)
             else:
-                g_emb, s_emb = self.model(
+                g_emb, s_emb, temp = self.model(
                     ground_image=ground_img,
                     satellite_image=sat_img
                 )
-
-
-            # Compute loss
-            loss = self.compute_loss(g_emb, s_emb, g_txt_emb, s_txt_emb, label)
+                loss = self.compute_loss(g_emb, s_emb, None, None, label, temp)
 
             # Backward
             self.accelerator.backward(loss)
@@ -159,19 +157,19 @@ class Trainer:
                 ground_img, sat_img, label, ground_txt, sat_txt = batch
 
                 if self.cfg.model.use_text:
-                    g_emb, s_emb, g_txt_emb, s_txt_emb = self.model(
+                    g_emb, s_emb, g_txt_emb, s_txt_emb, temp = self.model(
                         ground_image=ground_img,
                         satellite_image=sat_img,
                         ground_captions=ground_txt,
                         satellite_captions=sat_txt
                     )
-                    loss = self.compute_loss(g_emb, s_emb, g_txt_emb, s_txt_emb, label)
+                    loss = self.compute_loss(g_emb, s_emb, g_txt_emb, s_txt_emb, label, temp)
                 else:
-                    g_emb, s_emb = self.model(
+                    g_emb, s_emb, temp = self.model(
                         ground_image=ground_img,
                         satellite_image=sat_img
                     )
-                    loss = self.compute_loss(g_emb, s_emb, None, None, label)
+                    loss = self.compute_loss(g_emb, s_emb, None, None, label, temp)
 
                 total_loss += loss.item()
 
@@ -189,8 +187,7 @@ class Trainer:
         # Implement logic or call separate function
         return recall
 
-    def compute_loss(self, g_emb, s_emb, g_txt_emb, s_txt_emb, label):
-        # If not using text, ignore g_txt_emb, s_txt_emb.
+    def compute_loss(self, g_emb, s_emb, g_txt_emb, s_txt_emb, label, temp):
         # Normalize embeddings
         g_emb = torch.nn.functional.normalize(g_emb, dim=-1)
         s_emb = torch.nn.functional.normalize(s_emb, dim=-1)
@@ -205,7 +202,7 @@ class Trainer:
         logits = g_emb_all @ s_emb_all.T  # [B_total, B_total]
 
         # Temperature
-        temp = torch.exp(self.model.temperature)  # get actual temperature
+        temp = temp.exp()
         # Targets
         batch_size = g_emb_all.size(0)
         targets = torch.arange(batch_size, device=g_emb_all.device)
