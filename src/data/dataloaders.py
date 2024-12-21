@@ -44,7 +44,10 @@ def build_dataloaders(cfg):
         same_area=cfg.dataset.same_area,
         ground_transforms=ground_transforms,
         satellite_transforms=satellite_transforms,
-        use_captions=True
+        use_captions=cfg.model.use_captions,
+        prob_rotate=cfg.dataset.prob_rotate,
+        prob_flip=cfg.dataset.prob_flip,
+        shuffle_batch_size=cfg.dataset.batch_size
     )
 
     train_loader = DataLoader(
@@ -65,7 +68,9 @@ def build_dataloaders(cfg):
         same_area=cfg.dataset.same_area,
         ground_transforms=ground_transforms,
         satellite_transforms=satellite_transforms,
-        use_captions=True
+        use_captions=cfg.model.use_captions,
+        prob_rotate=0,
+        prob_flip=0,
     )
     val_loader = DataLoader(
         val_dataset,

@@ -9,6 +9,9 @@ from PIL import Image
 import copy
 from collections import defaultdict
 
+import random
+from torchvision import transforms
+
 
 class VigorDataset(Dataset):
     """
@@ -25,7 +28,10 @@ class VigorDataset(Dataset):
                  same_area: bool = True,
                  ground_transforms=None,
                  satellite_transforms=None,
-                 use_captions: bool = True):
+                 use_captions: bool = True,
+                 prob_flip = 0.5,
+                 prob_rotate = 0.5,
+                 shuffle_batch_size = 64):
         """
         Args:
             data_folder (str): Path to the VIGOR dataset directory.
@@ -34,6 +40,9 @@ class VigorDataset(Dataset):
             ground_transforms: Torchvision transforms for ground images.
             satellite_transforms: Torchvision transforms for satellite images.
             use_captions (bool): If True, load captions for ground and sat images.
+            prob_flip (float): Probability of horizontal flip in transforms.
+            prob_rotate (float): Probability of random rotation in transforms.
+            shuffle_batch_size (int): Number of samples in a batch for shuffling.
         """
         super().__init__()
         self.data_folder = data_folder
@@ -42,7 +51,11 @@ class VigorDataset(Dataset):
         self.ground_transforms = ground_transforms
         self.satellite_transforms = satellite_transforms
         self.use_captions = use_captions
+        self.shuffle_batch_size =  shuffle_batch_size
 
+        # Augmentation probabilities
+        self.prob_flip = prob_flip        
+        self.prob_rotate = prob_rotate
         # Define cities based on same_area and split
         if same_area:
             self.cities = ['Chicago', 'NewYork', 'SanFrancisco', 'Seattle']
@@ -73,7 +86,6 @@ class VigorDataset(Dataset):
         # for a unique sat_id we can have 1 or 2 ground views as gt
         for pair in self.pairs:      
             self.idx2pairs[pair[1]].append(pair)
-        self.shuffle_batch_size = 16 # [TODO] Set this to a batch size from config
 
         # Load captions if needed
         if self.use_captions:
@@ -160,12 +172,23 @@ class VigorDataset(Dataset):
         # Load images
         ground_img = self._load_image(self.idx2ground_path[idx_ground])
         satellite_img = self._load_image(self.idx2sat_path[idx_sat])
-
+        if random.random() < self.prob_flip:
+            ground_img = ground_img.transpose(Image.FLIP_LEFT_RIGHT)
+            satellite_img = satellite_img.transpose(Image.FLIP_LEFT_RIGHT)
         # Apply transforms
         if self.ground_transforms:
             ground_img = self.ground_transforms(ground_img)
         if self.satellite_transforms:
             satellite_img = self.satellite_transforms(satellite_img)
+
+        if random.random() < self.prob_rotate:
+            r = random.choice([1, 2, 3])
+            satellite_img = torch.rot90(satellite_img, k=r, dims=(1, 2)) 
+            
+            # use roll for ground view if rotate sat view
+            _, _, w = ground_img.shape # c, h, w
+            shifts = - w//4 * r
+            ground_img = torch.roll(ground_img, shifts=shifts, dims=2)   
 
         # Get captions
         ground_filename = self.idx2ground[idx_ground]
@@ -200,7 +223,6 @@ class VigorDataset(Dataset):
         custom shuffle function for unique class_id sampling in batch
         '''
         import time
-        import random
         from tqdm import tqdm 
         print("\nShuffle Dataset:")
 

@@ -28,15 +28,17 @@ dataset:
   same_area: false
   batch_size: 4
   num_workers: 0
+  prob_flip: 0.5
+  prob_rotate: 0.75
   ground_transforms:
     - type: "Resize"
-      height: 224
-      width: 224
+      height: 384
+      width: 768
     - type: "ToTensor"
   satellite_transforms:
     - type: "Resize"
-      height: 224
-      width: 224
+      height: 384
+      width: 384
     - type: "ToTensor"
 
 wandb:
