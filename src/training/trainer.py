@@ -11,16 +11,6 @@ from .utils import clip_gradients
 
 class Trainer:
     def __init__(self, cfg: Any, model: torch.nn.Module, train_loader: DataLoader, val_loader: DataLoader, sim_dict=None, accelerator=None):
-        """
-        Args:
-            cfg: Configuration object.
-            model (nn.Module): The model to train.
-            train_loader (DataLoader): Training dataloader.
-            val_loader (DataLoader): Validation dataloader for frequent metric checks.
-            sim_dict: A dictionary containing similarity scores for data mining.
-            accelerator: The Accelerator instance for distributed/mixed-precision training.
-
-        """
         self.cfg = cfg
         self.model = model
         self.train_loader = train_loader
@@ -28,11 +18,14 @@ class Trainer:
         self.sim_dict = sim_dict
         self.accelerator = accelerator
 
-
-        # Create optimizer & scheduler
+        # 1) Create optimizer
         self.optimizer = create_optimizer(cfg, model)
-        self.scheduler = create_scheduler(cfg, self.optimizer)
 
+        # 2) Conditionally create scheduler
+        self.scheduler = None
+        if hasattr(cfg.training, "scheduler") and cfg.training.scheduler and getattr(cfg.training.scheduler, "type", None):
+            print("Creating scheduler")
+            self.scheduler = create_scheduler(cfg, self.optimizer)
 
         # Prepare with accelerator
         self.model, self.optimizer, self.train_loader, self.val_loader = self.accelerator.prepare(
@@ -43,49 +36,42 @@ class Trainer:
         self.global_step = 0
         self.best_val_loss = float('inf')
 
-
-        # Checkpoint directory
+        # 3) Ensure checkpoint dir exists
         os.makedirs(cfg.training.checkpoint_dir, exist_ok=True)
 
     def run(self):
-        """Run the full training loop."""
         num_epochs = self.cfg.training.num_epochs
-        if self.sim_dict is not None:    
+
+        if self.sim_dict is not None:
             self.train_loader.dataset.shuffle(sim_dict=self.sim_dict, neighbour_select=32, neighbour_range=64)
+
         for epoch in range(num_epochs):
             self.epoch = epoch
             train_loss = self.train_one_epoch()
             val_loss = self.validate()
 
-            # Step scheduler if needed
+            # 4) Step scheduler if it exists
             if self.scheduler is not None:
                 self.scheduler.step()
 
             # Logging
-            # Logging via Accelerator
             self.accelerator.log({
                 "epoch": epoch,
                 "train_loss": train_loss,
                 "val_loss": val_loss
             }, step=self.global_step)
 
-            # Checkpoint on improvement
+            # Checkpoint if better
             if val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
                 self.save_checkpoint("best_model.pt")
 
-            # # Occasionally run full retrieval evaluation
-            # if (epoch + 1) % self.cfg.training.eval_recall_every == 0:
-            #     recall = self.evaluate_recall()
-            #     if self.logger is not None:
-            #         self.logger.log_metrics({"recall": recall}, step=self.global_step)
-
             # Save periodic checkpoint
             if (epoch + 1) % self.cfg.training.save_every == 0:
                 self.save_checkpoint(f"checkpoint_epoch_{epoch+1}.pt")
-            
-            # Custom sampling for data mining
-            if self.sim_dict is not None:    
+
+            # Shuffle again if sim_dict
+            if self.sim_dict is not None:
                 self.train_loader.dataset.shuffle(sim_dict=self.sim_dict, neighbour_select=64, neighbour_range=128)
 
     def train_one_epoch(self):
@@ -96,10 +82,8 @@ class Trainer:
         for batch_idx, batch in enumerate(self.train_loader):
             self.optimizer.zero_grad()
 
-            # Extract batch data
             ground_img, sat_img, label, ground_txt, sat_txt = batch
 
-            # Forward pass with or without captions based on `use_text`
             if self.cfg.model.use_text:
                 g_emb, s_emb, g_txt_emb, s_txt_emb, temp = self.model(
                     ground_image=ground_img,
@@ -115,11 +99,20 @@ class Trainer:
                 )
                 loss = self.compute_loss(g_emb, s_emb, None, None, label, temp)
 
+            print(f"Batch {batch_idx}, Loss = {loss.item()}")  # (You asked for loss printing)
+            with torch.no_grad():
+                print("Ground embedding mean:", g_emb.mean().item())
+                print("Sat embedding mean:", s_emb.mean().item())
+
             # Backward
             self.accelerator.backward(loss)
-
-            # Gradient clipping
-            if self.cfg.training.grad_clip.enabled:
+            for name, param in self.model.named_parameters():
+                if param.grad is not None:
+                    print(f"{name} grad mean: {param.grad.mean().item():.6f}")
+                break  
+            # 5) Conditionally clip gradients
+            use_grad_clip = hasattr(self.cfg.training, "grad_clip") and self.cfg.training.grad_clip.enabled
+            if use_grad_clip:
                 clip_gradients(self.accelerator, self.model, self.cfg.training.grad_clip.max_norm)
 
             self.optimizer.step()
@@ -130,11 +123,6 @@ class Trainer:
             # Intermediate logging
             if self.global_step % self.cfg.training.log_every == 0:
                 self.accelerator.log({"train_loss": loss.item()}, step=self.global_step)
-
-            # Warm-up logic if needed (depends on scheduler or separate step)
-            # For example, if you have a warmup scheduler step per iteration:
-            # if self.cfg.training.warmup.enabled and current_step < warmup_steps:
-            #     warmup_scheduler.step()
 
         avg_loss = total_loss / (batch_idx + 1)
         elapsed = time.time() - start_time
@@ -171,48 +159,31 @@ class Trainer:
         return avg_val_loss
 
     def evaluate_recall(self):
-        # Placeholder for a full retrieval metric
-        # For a full dataset retrieval:
-        # 1. Gather all ground embeddings and satellite embeddings for the test set.
-        # 2. Compute pairwise similarities and determine recall@K.
-        # This is expensive, so done infrequently.
-        recall = 0.0
-        # Implement logic or call separate function
-        return recall
+        return 0.0  # Placeholder
 
     def compute_loss(self, g_emb, s_emb, g_txt_emb, s_txt_emb, label, temp):
-        # Normalize embeddings
-        g_emb = torch.nn.functional.normalize(g_emb, dim=-1)
-        s_emb = torch.nn.functional.normalize(s_emb, dim=-1)
+        # 6) Optional label smoothing
+        import torch.nn.functional as F
 
-        # Gather from all processes if distributed
+        g_emb = F.normalize(g_emb, dim=-1)
+        s_emb = F.normalize(s_emb, dim=-1)
         g_emb_all = self.accelerator.gather(g_emb)
         s_emb_all = self.accelerator.gather(s_emb)
 
-        # Now g_emb_all and s_emb_all contain embeddings from all GPUs
-        # Compute similarity
-        # g_emb_all: [B_total, D], s_emb_all: [B_total, D]
-        logits = g_emb_all @ s_emb_all.T  # [B_total, B_total]
-
-        # Targets
+        logits = g_emb_all @ s_emb_all.T
         batch_size = g_emb_all.size(0)
         targets = torch.arange(batch_size, device=g_emb_all.device)
 
-        # We can apply label smoothing if desired:
-        # CrossEntropy with label smoothing defined once outside or here:
-        # Example: loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=self.cfg.training.label_smoothing)
-        # If label_smoothing is defined in cfg:
-        label_smoothing = getattr(self.cfg.training, 'label_smoothing', 0.1)
-        loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+        # label_smoothing = getattr(self.cfg.training, 'label_smoothing', 0.0)
+        # print(f"Label Smoothing: {label_smoothing}")
+        # if smooth:
+        #     loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+        loss_fn = torch.nn.CrossEntropyLoss()
 
-        # ground->sat
         loss1 = loss_fn(logits / temp, targets)
-        # sat->ground (symmetric)
         loss2 = loss_fn(logits.T / temp, targets)
-
         loss = (loss1 + loss2) / 2.0
         return loss
-
 
     def save_checkpoint(self, filename):
         if self.accelerator.is_main_process:

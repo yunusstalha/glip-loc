@@ -49,7 +49,6 @@ class GLIPLocModel(nn.Module):
         else:
             # ConvNeXt scenario
             self.vision_model = timm.create_model(model_name, pretrained=pretrained, num_classes=0)
-
             # Determine the feature dimension of ConvNeXt
             if 'tiny' in self.model_name or 'small' in self.model_name:
                 hidden_size = 768
