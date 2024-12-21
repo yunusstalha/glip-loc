@@ -9,6 +9,10 @@ from .optimizers import create_optimizer
 from .schedulers import create_scheduler
 from .utils import clip_gradients
 
+import torch.nn as nn
+import torch.nn.functional as F
+
+ 
 class Trainer:
     def __init__(self, cfg: Any, model: torch.nn.Module, train_loader: DataLoader, val_loader: DataLoader, sim_dict=None, accelerator=None):
         self.cfg = cfg
@@ -162,27 +166,33 @@ class Trainer:
         return 0.0  # Placeholder
 
     def compute_loss(self, g_emb, s_emb, g_txt_emb, s_txt_emb, label, temp):
-        # 6) Optional label smoothing
-        import torch.nn.functional as F
+        # # 6) Optional label smoothing
+        # import torch.nn.functional as F
 
-        g_emb = F.normalize(g_emb, dim=-1)
-        s_emb = F.normalize(s_emb, dim=-1)
-        g_emb_all = self.accelerator.gather(g_emb)
-        s_emb_all = self.accelerator.gather(s_emb)
+        # g_emb = F.normalize(g_emb, dim=-1)
+        # s_emb = F.normalize(s_emb, dim=-1)
+        # g_emb_all = self.accelerator.gather(g_emb)
+        # s_emb_all = self.accelerator.gather(s_emb)
 
-        logits = g_emb_all @ s_emb_all.T
-        batch_size = g_emb_all.size(0)
-        targets = torch.arange(batch_size, device=g_emb_all.device)
+        # logits = g_emb_all @ s_emb_all.T
+        # batch_size = g_emb_all.size(0)
+        # targets = torch.arange(batch_size, device=g_emb_all.device)
 
         # label_smoothing = getattr(self.cfg.training, 'label_smoothing', 0.0)
         # print(f"Label Smoothing: {label_smoothing}")
         # if smooth:
         #     loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
-        loss_fn = torch.nn.CrossEntropyLoss()
 
-        loss1 = loss_fn(logits / temp, targets)
-        loss2 = loss_fn(logits.T / temp, targets)
-        loss = (loss1 + loss2) / 2.0
+        g_emb = F.normalize(g_emb, dim=-1)
+        s_emb = F.normalize(s_emb, dim=-1)
+        
+        logits = temp * g_emb @ s_emb.T        
+        labels = torch.arange(len(logits), dtype=torch.long, device=g_emb.device)
+        loss_fn = torch.nn.CrossEntropyLoss()
+        
+        loss = (loss_fn(logits, labels) + loss_fn(logits.T, labels))/2
+
+
         return loss
 
     def save_checkpoint(self, filename):

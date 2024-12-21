@@ -13,13 +13,13 @@ training:
   #   enabled: False
   #   max_norm: 100.0
   label_smoothing: 0.1
-  log_every: 50
+  log_every: 1
   save_every: 500
   eval_recall_every: 10
   checkpoint_dir: "/home/erzurumlu.1/yunus/research_drive/checkpoints"
 
 accelerate:
-  fp16: false
+  fp16: True
   logging_dir: "logs"  # Directory for Accelerate to store logs
 
 dataset:
@@ -46,7 +46,7 @@ wandb:
 
 accelerate:
   enabled: true
-  fp16: False
+  fp16: true
 
 model:
   name: "openai/clip-vit-base-patch16"
