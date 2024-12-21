@@ -58,21 +58,21 @@ def build_dataloaders(cfg):
 
     val_loader = None
     # If you have a validation split defined in the config and want a val loader:
-    if hasattr(cfg.dataset, 'val_split') and cfg.dataset.val_split:
-        val_dataset = VigorDataset(
-            data_folder=cfg.dataset.data_folder,
-            split='val',
-            same_area=cfg.dataset.same_area,
-            ground_transforms=ground_transforms,
-            satellite_transforms=satellite_transforms,
-            use_captions=True
-        )
-        val_loader = DataLoader(
-            val_dataset,
-            batch_size=cfg.dataset.batch_size,
-            shuffle=False,
-            num_workers=cfg.dataset.num_workers,
-            pin_memory=True,
-        )
+    # if hasattr(cfg.dataset, 'val_split') and cfg.dataset.val_split:
+    val_dataset = VigorDataset(
+        data_folder=cfg.dataset.data_folder,
+        split='test',
+        same_area=cfg.dataset.same_area,
+        ground_transforms=ground_transforms,
+        satellite_transforms=satellite_transforms,
+        use_captions=True
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=cfg.dataset.batch_size,
+        shuffle=False,
+        num_workers=cfg.dataset.num_workers,
+        pin_memory=True,
+    )
 
     return train_loader, val_loader

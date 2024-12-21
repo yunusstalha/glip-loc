@@ -7,6 +7,8 @@ from torch.utils.data import Dataset
 from PIL import Image
 
 import copy
+from collections import defaultdict
+
 
 class VigorDataset(Dataset):
     """
@@ -67,8 +69,11 @@ class VigorDataset(Dataset):
 
         # Prepare pairs: (ground_idx, sat_idx)
         self.pairs = list(zip(self.df_ground.index, self.df_ground.sat))
-        self._build_idx2pairs()
-        self.shuffle_batch_size = 64 # [TODO] Set this to a batch size from config
+        self.idx2pairs = defaultdict(list)
+        # for a unique sat_id we can have 1 or 2 ground views as gt
+        for pair in self.pairs:      
+            self.idx2pairs[pair[1]].append(pair)
+        self.shuffle_batch_size = 16 # [TODO] Set this to a batch size from config
 
         # Load captions if needed
         if self.use_captions:
@@ -78,11 +83,13 @@ class VigorDataset(Dataset):
             self.ground_captions = {}
             self.sat_captions = {}
         self.samples = copy.deepcopy(self.pairs)
+
     def _load_satellite_list(self):
         sat_list = []
         for city in self.cities:
             df_tmp = pd.read_csv(f'{self.data_folder}/splits/{city}/satellite_list.txt', 
-                                 header=None, sep='\s+', names=['sat'])
+                                 header=None, sep='\s+')
+            df_tmp = df_tmp.rename(columns={0: "sat"})  # Match original column naming
             df_tmp["path"] = df_tmp.apply(lambda x: f'{self.data_folder}/{city}/satellite/{x.sat}', axis=1)
             df_tmp['city'] = city
             sat_list.append(df_tmp)
@@ -139,13 +146,13 @@ class VigorDataset(Dataset):
                 captions.update(cap_dict)
         return captions
     
-    def _build_idx2pairs(self):
-        from collections import defaultdict
-        self.idx2pairs = defaultdict(list)
-        # self.pairs is a list of (ground_idx, sat_idx)
-        for pair in self.pairs:
-            _, sat_idx = pair
-            self.idx2pairs[sat_idx].append(pair)
+    # def _build_idx2pairs(self):
+    #     from collections import defaultdict
+    #     self.idx2pairs = defaultdict(list)
+    #     # self.pairs is a list of (ground_idx, sat_idx)
+    #     for pair in self.pairs:
+    #         _, sat_idx = pair
+    #         self.idx2pairs[sat_idx].append(pair)
 
     def __getitem__(self, index):
         idx_ground, idx_sat = self.samples[index]
@@ -194,32 +201,34 @@ class VigorDataset(Dataset):
         '''
         import time
         import random
-        from tqdm import tqdm
-
+        from tqdm import tqdm 
         print("\nShuffle Dataset:")
-        
+
         pair_pool = copy.deepcopy(self.pairs)
         idx2pair_pool = copy.deepcopy(self.idx2pairs)
         
         neighbour_split = neighbour_select // 2
-                            
+                    
         if sim_dict is not None:
             similarity_pool = copy.deepcopy(sim_dict)                
         
         # Shuffle pairs order
         random.shuffle(pair_pool)
-    
+        
+        
         # Lookup if already used in epoch
         pairs_epoch = set()   
         idx_batch = set()
-
+    
+        
         # buckets
         batches = []
         current_batch = []
-
+        
+        
         # counter
         break_counter = 0
-
+        
         # progressbar
         pbar = tqdm()
 
@@ -250,12 +259,15 @@ class VigorDataset(Dataset):
                         near_random = near_random[:neighbour_split]
                         near_similarity_select = near_always + near_random
 
+                        
                         for idx_near in near_similarity_select:
+                        
                         
                             # check for space in batch
                             if len(current_batch) >= self.shuffle_batch_size:
                                 break
                         
+                            # no check for pair in epoch necessary cause all we add is removed from pool
                             if idx_near not in idx_batch:
                         
                                 near_pairs = copy.deepcopy(idx2pair_pool[idx_near])
@@ -264,7 +276,7 @@ class VigorDataset(Dataset):
                                 random.shuffle(near_pairs)
                             
                                 for near_pair in near_pairs:
-                                                                                        
+                                                                                
                                     idx_batch.add(idx_near)
                                     current_batch.append(near_pair)
                                     pairs_epoch.add(near_pair)
@@ -274,7 +286,7 @@ class VigorDataset(Dataset):
                                     
                                     # only select one view
                                     break
-                    
+                            
                     break_counter = 0
                     
                 else:
@@ -296,7 +308,7 @@ class VigorDataset(Dataset):
                 batches.extend(current_batch)
                 idx_batch = set()
                 current_batch = []
-
+    
         pbar.close()
         
         # wait before closing progress bar
@@ -307,4 +319,4 @@ class VigorDataset(Dataset):
         print("Original Length: {} - Length after Shuffle: {}".format(len(self.pairs), len(self.samples))) 
         print("Break Counter:", break_counter)
         print("Pairs left out of last batch to avoid creating noise:", len(self.pairs) - len(self.samples))
-        print("First Element ID: {} - Last Element ID: {}".format(self.samples[0][1], self.samples[-1][1]))
+        print("First Element ID: {} - Last Element ID: {}".format(self.samples[0][1], self.samples[-1][1]))  

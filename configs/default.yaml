@@ -11,7 +11,7 @@ training:
     T_max: 40
   grad_clip:
     enabled: True
-    max_norm: 1.0
+    max_norm: 100.0
   label_smoothing: 0.1
   log_every: 50
   save_every: 5
@@ -21,7 +21,7 @@ training:
 accelerate:
   fp16: true
   logging_dir: "logs"  # Directory for Accelerate to store logs
-  
+
 dataset:
   name: "VIGOR"
   data_folder: "/home/erzurumlu.1/yunus/research_drive/data/VIGOR"

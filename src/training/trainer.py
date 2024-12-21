@@ -50,6 +50,8 @@ class Trainer:
     def run(self):
         """Run the full training loop."""
         num_epochs = self.cfg.training.num_epochs
+        if self.sim_dict is not None:    
+            self.train_loader.dataset.shuffle(sim_dict=self.sim_dict, neighbour_select=32, neighbour_range=64)
         for epoch in range(num_epochs):
             self.epoch = epoch
             train_loss = self.train_one_epoch()
