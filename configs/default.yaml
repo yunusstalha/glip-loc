@@ -1,20 +1,19 @@
 training:
   seed: 42
   num_epochs: 400
-  batch_size: 16
   optimizer:
     type: "adamw"
-    lr: 0.01
+    lr: 0.001
     weight_decay: 0.01
-  # scheduler:
-  #   type: "null" # cosine_annealing
-  #   T_max: 40
-  # grad_clip:
-  #   enabled: False
-  #   max_norm: 100.0
+  scheduler:
+    type: "cosine_annealing" # cosine_annealing
+    T_max: 40
+  grad_clip:
+    enabled: True
+    max_norm: 100.0
   label_smoothing: 0.1
   log_every: 1
-  save_every: 500
+  save_every: 5
   eval_recall_every: 10
   checkpoint_dir: "/home/erzurumlu.1/yunus/research_drive/checkpoints"
 
@@ -26,8 +25,8 @@ dataset:
   name: "VIGOR"
   data_folder: "/home/erzurumlu.1/yunus/research_drive/data/VIGOR"
   same_area: false
-  batch_size: 4
-  num_workers: 0
+  batch_size: 32
+  num_workers: 8
   prob_flip: 0.5
   prob_rotate: 0.75
   ground_transforms:
@@ -42,15 +41,15 @@ dataset:
     - type: "ToTensor"
 
 wandb:
-  enabled: false
+  enabled: True
   project: "glip-loc"
   entity: "erzurumlu-1-the-ohio-state-university"
 
 accelerate:
-  enabled: true
-  fp16: true
+  enabled: True
+  fp16: True
 
 model:
-  name: "openai/clip-vit-base-patch16"
+  name: "convnext_base.fb_in22k_ft_in1k_384"
   pretrained: true
   use_text: false

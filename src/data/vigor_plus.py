@@ -51,7 +51,7 @@ class VigorDataset(Dataset):
         self.ground_transforms = ground_transforms
         self.satellite_transforms = satellite_transforms
         self.use_captions = use_captions
-        self.shuffle_batch_size =  shuffle_batch_size
+        self.shuffle_batch_size =  64
 
         # Augmentation probabilities
         self.prob_flip = prob_flip        
