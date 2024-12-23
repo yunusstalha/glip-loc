@@ -1,0 +1,14 @@
+# eval.yaml
+dataset:
+  data_folder: "/home/erzurumlu.1/yunus/research_drive/data/VIGOR"
+  num_workers: 4
+  same_area: false
+
+model:
+  name: "openai/clip-vit-base-patch32" # "openai/clip-vit-base-patch32" "convnext_base"
+  pretrained: false
+  use_text: false
+
+evaluate:
+  batch_size: 128
+  step_size: 2000

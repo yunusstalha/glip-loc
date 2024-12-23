@@ -3,7 +3,7 @@ training:
   num_epochs: 400
   optimizer:
     type: "adamw"
-    lr: 0.001
+    lr: 0.00001
     weight_decay: 0.01
   scheduler:
     type: "cosine_annealing" # cosine_annealing
@@ -50,6 +50,6 @@ accelerate:
   fp16: True
 
 model:
-  name: "convnext_base.fb_in22k_ft_in1k_384"
+  name: "convnext_base.fb_in22k_ft_in1k_384" #"openai/clip-vit-base-patch32" , "convnext_base.fb_in22k_ft_in1k_384"
   pretrained: true
   use_text: false

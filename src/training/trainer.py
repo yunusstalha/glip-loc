@@ -294,6 +294,8 @@ class Trainer:
         loss_text_to_image = loss_fn(logits_per_text, global_labels)
         loss = (loss_image_to_text + loss_text_to_image) / 2
         return loss
+
+
     def save_checkpoint(self, filename):
         if self.accelerator.is_main_process:
             checkpoint_path = os.path.join(self.cfg.training.checkpoint_dir, filename)
