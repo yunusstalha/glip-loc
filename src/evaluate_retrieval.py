@@ -65,7 +65,7 @@ import torchvision.transforms as T
 def predict(config, model, dataloader):
     model.eval()
     num_samples = len(dataloader.dataset)
-    feature_dim = 512  # Assuming this is the feature size from the model
+    feature_dim = 1024  # Assuming this is the feature size from the model
     
     # Pre-allocate tensors
     all_feats = torch.zeros((num_samples, feature_dim), dtype=torch.float32)

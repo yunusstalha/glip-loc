@@ -8,7 +8,6 @@ from typing import Any
 from .optimizers import create_optimizer
 from .schedulers import create_scheduler
 from .utils import clip_gradients
-
 import torch.nn.functional as F
 import torch.distributed as dist
 from torch.autograd import Function
@@ -17,10 +16,13 @@ from transformers import (
     get_cosine_schedule_with_warmup,
 )
 
+import wandb
+
 def generate_run_name(cfg):
     import time
     run_name = f"{cfg.model.name}_lr{cfg.training.optimizer.lr}_{time.strftime('%Y%m%d_%H%M%S')}"
     return run_name
+# Suppose in main.py or trainer.py, you define a function to build eval loaders:
 
 
 class AllGatherWithGrad(Function):
@@ -83,15 +85,21 @@ class AllGatherWithGrad(Function):
         return grad_input
 
 class Trainer:
-    def __init__(self, cfg: Any, model: torch.nn.Module, train_loader: DataLoader, val_loader: DataLoader, sim_dict=None, accelerator=None):
+    def __init__(self, cfg: Any, 
+                model: torch.nn.Module, 
+                train_loader: DataLoader, 
+                val_loader: DataLoader,
+                sim_dict=None, 
+                accelerator=None):
+
         self.cfg = cfg
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.sim_dict = sim_dict
         self.accelerator = accelerator
-
         self.run_name = generate_run_name(cfg)
+        self.run_dir = os.path.join(cfg.training.checkpoint_dir, self.run_name)
 
 
         if self.cfg.wandb.enabled and self.accelerator.is_main_process:
@@ -100,10 +108,13 @@ class Trainer:
                 config=vars(self.cfg),
                 init_kwargs={
                     "entity": self.cfg.wandb.entity,
-                    "name": self.run_name
-                    
                 }
             )
+            wandb.watch(self.model, log="all", log_freq=100)
+            # Override run_name and run_dir if wandb enabled
+            self.run_name = wandb.run.name
+            self.run_dir = os.path.join(cfg.training.checkpoint_dir, self.run_name)
+
         # 1) Create optimizer
         self.optimizer = create_optimizer(cfg, model)
 
@@ -143,8 +154,6 @@ class Trainer:
             self.epoch = epoch
             train_loss = self.train_one_epoch()
             val_loss = self.validate()
-
-
             # Logging
             if self.accelerator.is_main_process:
                 self.accelerator.log({
@@ -153,12 +162,12 @@ class Trainer:
                     "val_loss": val_loss
                 }, step=self.global_step)
 
-            if self.accelerator.is_main_process:
-                for name, param in self.model.named_parameters():
-                    if param.grad is not None:
-                        grad_mean = param.grad.detach().float().mean().item()
-                        # Log the grad mean
-                        self.accelerator.log({f"grad_mean/{name}": grad_mean}, step=self.global_step)
+            # if self.accelerator.is_main_process:
+            #     for name, param in self.model.named_parameters():
+            #         if param.grad is not None:
+            #             grad_mean = param.grad.detach().float().mean().item()
+            #             # Log the grad mean
+            #             self.accelerator.log({f"grad_mean/{name}": grad_mean}, step=self.global_step)
 
             # Checkpoint if better
             if val_loss < self.best_val_loss:
@@ -216,7 +225,7 @@ class Trainer:
                 print(f'Loss: {loss.item()}, LR: {self.optimizer.param_groups[0]["lr"]}, Global Step: {self.global_step}, Epoch: {self.epoch+1}/{self.cfg.training.num_epochs}')
                 # Intermediate logging
                 if self.global_step % self.cfg.training.log_every == 0:
-                    self.accelerator.log({"train_loss": loss.item()}, step=self.global_step)
+                    self.accelerator.log({"train_loss": loss.item(), "learning_rate":self.optimizer.param_groups[0]["lr"]}, step=self.global_step)
 
         avg_loss = total_loss / (batch_idx + 1)
         elapsed = time.time() - start_time
@@ -255,50 +264,51 @@ class Trainer:
     def evaluate_recall(self):
         return 0.0  # Placeholder
 
-    # def compute_loss(self, g_emb, s_emb, g_txt_emb, s_txt_emb, label, temp):
-    #     g_emb = F.normalize(g_emb, dim=-1)
-    #     s_emb = F.normalize(s_emb, dim=-1)
+    def compute_loss(self, g_emb, s_emb, g_txt_emb, s_txt_emb, label, temp):
+        g_emb = F.normalize(g_emb, dim=-1)
+        s_emb = F.normalize(s_emb, dim=-1)
         
-    #     logits = temp * g_emb @ s_emb.T        
-    #     labels = torch.arange(len(logits), dtype=torch.long, device=g_emb.device)         
-    #     label_smoothing = getattr(self.cfg.training, 'label_smoothing', 0.0)  # default 0   
-    #     loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
-        
-    #     loss = (loss_fn(logits, labels) + loss_fn(logits.T, labels))/2
-
-
-    #     return loss
-    def compute_loss(self, ground_embedding, satellite_embedding, g_txt_emb, s_txt_emb,label,  temperature):
-        # Normalize features
-        ground_embedding = F.normalize(ground_embedding, dim=-1)
-        satellite_embedding = F.normalize(satellite_embedding, dim=-1)
-
-        # Gather features from all devices
-        all_ground_embedding = AllGatherWithGrad.apply(ground_embedding)
-        all_satellite_embedding = AllGatherWithGrad.apply(satellite_embedding)
-        global_batch_size = all_ground_embedding.size(0)
-        # print('Requires Grad')
-        # print(all_ground_embedding.requires_grad)
-        # Compute logits
-        logits_per_image = temperature * all_ground_embedding @ all_satellite_embedding.T
-        logits_per_text = logits_per_image.T
-
-
-        # labels = torch.arange(batch_size, device=g_emb.device)
-        global_labels = torch.arange(global_batch_size, device=logits_per_image.device)
-
-        # Compute loss
+        logits = temp * g_emb @ s_emb.T        
+        labels = torch.arange(len(logits), dtype=torch.long, device=g_emb.device)         
         label_smoothing = getattr(self.cfg.training, 'label_smoothing', 0.0)  # default 0   
         loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
-        loss_image_to_text = loss_fn(logits_per_image, global_labels)
-        loss_text_to_image = loss_fn(logits_per_text, global_labels)
-        loss = (loss_image_to_text + loss_text_to_image) / 2
+        
+        loss = (loss_fn(logits, labels) + loss_fn(logits.T, labels))/2
+
+
         return loss
+    # def compute_loss(self, ground_embedding, satellite_embedding, g_txt_emb, s_txt_emb,label,  temperature):
+    #     # Normalize features
+    #     ground_embedding = F.normalize(ground_embedding, dim=-1)
+    #     satellite_embedding = F.normalize(satellite_embedding, dim=-1)
+
+    #     # Gather features from all devices
+    #     all_ground_embedding = AllGatherWithGrad.apply(ground_embedding)
+    #     all_satellite_embedding = AllGatherWithGrad.apply(satellite_embedding)
+    #     global_batch_size = all_ground_embedding.size(0)
+    #     # print('Requires Grad')
+    #     # print(all_ground_embedding.requires_grad)
+    #     # Compute logits
+    #     logits_per_image = temperature * all_ground_embedding @ all_satellite_embedding.T
+    #     logits_per_text = logits_per_image.T
+
+
+    #     # labels = torch.arange(batch_size, device=g_emb.device)
+    #     global_labels = torch.arange(global_batch_size, device=logits_per_image.device)
+
+    #     # Compute loss
+    #     label_smoothing = getattr(self.cfg.training, 'label_smoothing', 0.0)  # default 0   
+    #     loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+    #     loss_image_to_text = loss_fn(logits_per_image, global_labels)
+    #     loss_text_to_image = loss_fn(logits_per_text, global_labels)
+    #     loss = (loss_image_to_text + loss_text_to_image) / 2
+    #     return loss
 
 
     def save_checkpoint(self, filename):
         if self.accelerator.is_main_process:
-            checkpoint_path = os.path.join(self.cfg.training.checkpoint_dir, filename)
+            os.makedirs(self.run_dir, exist_ok=True)
+            checkpoint_path = os.path.join(self.run_dir, filename)
             state = {
                 "model": self.accelerator.get_state_dict(self.model),
                 "optimizer": self.optimizer.state_dict(),
@@ -309,3 +319,4 @@ class Trainer:
             }
             torch.save(state, checkpoint_path)
             print(f"Checkpoint saved at {checkpoint_path}")
+

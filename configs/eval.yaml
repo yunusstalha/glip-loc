@@ -5,10 +5,10 @@ dataset:
   same_area: false
 
 model:
-  name: "openai/clip-vit-base-patch32" # "openai/clip-vit-base-patch32" "convnext_base"
+  name: "convnext_base" # "openai/clip-vit-base-patch32" "convnext_base"
   pretrained: false
   use_text: false
 
 evaluate:
   batch_size: 128
-  step_size: 2000
+  step_size: 1000

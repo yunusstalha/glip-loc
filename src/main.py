@@ -11,6 +11,62 @@ from utils.config_parser import load_config
 from data.dataloaders import build_dataloaders
 from models.glip_loc import GLIPLocModel
 from training.trainer import Trainer
+# import torchvision.transforms as T
+# from data.vigor_plus import VigorDataset
+
+# def build_eval_dataloaders(cfg):
+#     # Minimal eval transforms
+#     sat_transforms = T.Compose([
+#         T.Resize((384, 384)),
+#         T.ToTensor(),
+#         T.Normalize(mean=[0.485, 0.456, 0.406],
+#                     std=[0.229, 0.224, 0.225])
+#     ])
+#     ground_transforms = T.Compose([
+#         T.Resize((384, 768)),
+#         T.ToTensor(),
+#         T.Normalize(mean=[0.485, 0.456, 0.406],
+#                     std=[0.229, 0.224, 0.225])
+#     ])
+
+#     reference_dataset = VigorDataset(
+#         data_folder=cfg.dataset.data_folder,
+#         split="test",
+#         same_area=cfg.dataset.same_area,
+#         dataset_mode="reference",
+#         satellite_transforms=sat_transforms,
+#         ground_transforms=None,
+#         prob_flip=0.0,
+#         prob_rotate=0.0,
+#         use_captions=False
+#     )
+#     reference_loader = DataLoader(
+#         reference_dataset,
+#         batch_size=cfg.dataset.batch_size,
+#         shuffle=False,
+#         num_workers=cfg.dataset.num_workers,
+#         pin_memory=True
+#     )
+
+#     query_dataset = VigorDataset(
+#         data_folder=cfg.dataset.data_folder,
+#         split="test",
+#         same_area=cfg.dataset.same_area,
+#         dataset_mode="query",
+#         ground_transforms=ground_transforms,
+#         satellite_transforms=None,
+#         prob_flip=0.0,
+#         prob_rotate=0.0,
+#         use_captions=False
+#     )
+#     query_loader = DataLoader(
+#         query_dataset,
+#         batch_size=cfg.dataset.batch_size,
+#         shuffle=False,
+#         num_workers=cfg.dataset.num_workers,
+#         pin_memory=True
+#     )
+#     return reference_loader, query_loader
 
 def set_seed(seed: int):
     random.seed(seed)
@@ -49,7 +105,7 @@ def main():
 
     # 4) Build train & val dataloaders from your config
     train_loader, val_loader = build_dataloaders(cfg)
-
+    # reference_loader, query_loader = build_eval_dataloaders(cfg)
     # (Optional) Subset for quick debug
     # train_small = Subset(train_loader.dataset, range(50))
     # val_small = Subset(val_loader.dataset, range(50))
@@ -65,6 +121,7 @@ def main():
     sim_dict = None
     with open('/home/erzurumlu.1/yunus/research_drive/data/VIGOR/gps_dict_cross.pkl', "rb") as f:
         sim_dict = pickle.load(f)
+        
     # 6) Initialize the Trainer
     trainer = Trainer(
         cfg=cfg,
