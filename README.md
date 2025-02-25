@@ -2,6 +2,7 @@
 
 
 # GLIP-LOC : Grounded Image-Langugage Alignment for Geo-Localization
+![main_fig](https://github.com/user-attachments/assets/d5bbff8a-f203-40a7-a637-a9930de93d8e)
 
 This repository implements multimodal contrastive learning methods for visual geo-localization, focusing on learning representations from satellite and ground images. The approach leverages image-text  embeddings to improve spatial and semantic understanding for better retrieval performance.
 
